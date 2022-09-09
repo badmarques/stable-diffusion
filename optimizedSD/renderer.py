@@ -11,7 +11,7 @@ from PIL import Image
 from tqdm import tqdm, trange
 from einops import rearrange
 from ldm.util import instantiate_from_config
-from optimUtils import split_weighted_subprompts
+from optimizedSD.optimUtils import split_weighted_subprompts
 
 parser = argparse.ArgumentParser()
 
@@ -117,19 +117,23 @@ parser.add_argument(
     default="plms",
 )
 
-opt = parser.parse_args()
-
-if opt.seed == None:
-    opt.seed = randint(0, 1000000)
-seed_everything(opt.seed)
 
 class NeuralRender():
 
-    def __init__(self, options) -> None:
+    def __init__(self, options=None) -> None:
+
         
         self.config_yaml = "optimizedSD/v1-inference.yaml"
         self.ckpt = "models/ldm/stable-diffusion-v1/model.ckpt"
-        self.opt = options
+        if not options:
+            self.opt = parser.parse_args()
+        else:
+            self.opt = options
+
+        if self.opt.seed == None:
+            self.opt.seed = randint(0, 1000000)
+        seed_everything(self.opt.seed)
+        
         self.model, self.modelCS, self.modelFS, self.start_code = self.setup_model()
 
 
@@ -157,25 +161,25 @@ class NeuralRender():
         model = instantiate_from_config(config.modelUNet)
         _, _ = model.load_state_dict(sd, strict=False)
         model.eval()
-        model.unet_bs = opt.unet_bs
-        model.cdevice = opt.device
-        model.turbo = opt.turbo
+        model.unet_bs = self.opt.unet_bs
+        model.cdevice = self.opt.device
+        model.turbo = self.opt.turbo
 
         modelCS = instantiate_from_config(config.modelCondStage)
         _, _ = modelCS.load_state_dict(sd, strict=False)
         modelCS.eval()
-        modelCS.cond_stage_model.device = opt.device
+        modelCS.cond_stage_model.device = self.opt.device
 
         modelFS = instantiate_from_config(config.modelFirstStage)
         _, _ = modelFS.load_state_dict(sd, strict=False)
         modelFS.eval()
         del sd
 
-        if opt.device != "cpu" and opt.precision == "autocast":
+        if self.opt.device != "cpu" and self.opt.precision == "autocast":
             model.half()
             modelCS.half()
 
-        start_code = torch.randn([opt.n_samples, opt.C, opt.H // opt.f, opt.W // opt.f], device=opt.device)
+        start_code = torch.randn([self.opt.n_samples, self.opt.C, self.opt.H // self.opt.f, self.opt.W // self.opt.f], device=self.opt.device)
 
         return model, modelCS, modelFS, start_code
 
@@ -209,10 +213,10 @@ class NeuralRender():
                 for prompts in tqdm(data, desc="data"):
 
                     with autocast("cuda"):
-                        self.modelCS.to(opt.device)
+                        self.modelCS.to(self.opt.device)
                         uc = None
-                        if opt.scale != 1.0:
-                            uc = self.modelCS.get_learned_conditioning(opt.n_samples *  [""])
+                        if self.opt.scale != 1.0:
+                            uc = self.modelCS.get_learned_conditioning(self.opt.n_samples *  [""])
                         if isinstance(prompts, tuple):
                             prompts = list(prompts)
 
@@ -268,8 +272,8 @@ class NeuralRender():
                             plt.imshow(img)
                             plt.show()
 
-                            seeds += str(opt.seed) + ","
-                            opt.seed += 1
+                            seeds += str(self.opt.seed) + ","
+                            self.opt.seed += 1
 
                         if self.opt.device != "cpu":
                             mem = torch.cuda.memory_allocated() / 1e6
@@ -278,8 +282,3 @@ class NeuralRender():
                                 time.sleep(1)
                         del samples_ddim
     
-
-
-renderer = NeuralRender(opt)
-#renderer.sample(["A cat sleeping on the computer", "A dog sleeping on the computer"])
-renderer.sample("A cat sleeping on the computer")
