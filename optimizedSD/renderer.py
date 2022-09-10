@@ -251,9 +251,9 @@ class NeuralRender():
                             unconditional_guidance_scale=self.opt.scale,
                             unconditional_conditioning=uc,
                             eta=self.opt.ddim_eta,
-                            #x_T=None,
-                            x_T=self.start_code,
-                            sampler = self.opt.sampler,
+                            x_T=None,
+                            #x_T=self.start_code,
+                            sampler = "plms",
                         )
 
                         self.modelFS.to(self.opt.device)
@@ -267,11 +267,10 @@ class NeuralRender():
                             x_samples_ddim = self.modelFS.decode_first_stage(samples_ddim[i].unsqueeze(0))
                             x_sample = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                             x_sample = 255.0 * rearrange(x_sample[0].cpu().numpy(), "c h w -> h w c")
-                            img = Image.fromarray(x_sample.astype(np.uint8))
-
-                            plt.imshow(img)
-                            plt.show()
-
+                            #img = Image.fromarray(x_sample.astype(np.uint8))
+                            #plt.imshow(img)
+                            #plt.show()
+                            img = x_sample.astype(np.uint8)
                             seeds += str(self.opt.seed) + ","
                             self.opt.seed += 1
 
@@ -281,4 +280,6 @@ class NeuralRender():
                             while torch.cuda.memory_allocated() / 1e6 >= mem:
                                 time.sleep(1)
                         del samples_ddim
+                        return img
     
+#nr = NeuralRender()
